@@ -104,6 +104,34 @@
     background: var(--surface);
   }
 
+  .staff-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .staff-row label {
+    font-size: .8rem;
+    color: var(--ink-soft);
+    flex-shrink: 0;
+  }
+  .staff-row input {
+    flex: 1;
+    font-family: inherit;
+    font-size: .9rem;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .sync-status {
+    font-size: .74rem;
+    color: var(--ink-soft);
+    margin-top: -6px;
+    margin-bottom: 14px;
+  }
+
   section { margin-bottom: 22px; }
 
   .items {
@@ -416,6 +444,12 @@
   </header>
   <div class="today" id="todayLabel"></div>
 
+  <div class="staff-row">
+    <label for="staffName">担当者名</label>
+    <input id="staffName" type="text" placeholder="例: から揚げ係" />
+  </div>
+  <div class="sync-status" id="syncStatus"></div>
+
   <section>
     <div class="section-title">注文</div>
     <div class="items" id="itemsList"></div>
@@ -482,6 +516,10 @@
   var STORAGE_ITEMS = 'stall_register_items_v1';
   var STORAGE_LOG = 'stall_register_log_v1';
   var STORAGE_NAME = 'stall_register_name_v1';
+  var STORAGE_STAFF = 'stall_register_staff_v1';
+
+  // みんなで共有するGoogleスプレッドシートの送信先(Apps ScriptのウェブアプリURL)
+  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyirTGJNL0dK1SAVGQzEXN8TO7xkaesrgljXymFPaXMGkeAL7kYwt_ggI6NDvmTaaw/exec';
 
   var defaultItems = [
     { id: 'karaage', name: 'から揚げ', price: 300 },
@@ -521,10 +559,18 @@
   var toastEl = document.getElementById('toast');
   var stallNameInput = document.getElementById('stallName');
   var todayLabel = document.getElementById('todayLabel');
+  var staffNameInput = document.getElementById('staffName');
+  var syncStatusEl = document.getElementById('syncStatus');
 
   if (stallName) stallNameInput.value = stallName;
   stallNameInput.addEventListener('input', function () {
     safeSet(STORAGE_NAME, stallNameInput.value);
+  });
+
+  var savedStaff = safeGet(STORAGE_STAFF);
+  if (savedStaff) staffNameInput.value = savedStaff;
+  staffNameInput.addEventListener('input', function () {
+    safeSet(STORAGE_STAFF, staffNameInput.value);
   });
 
   var today = new Date();
@@ -638,6 +684,8 @@
     log.unshift({ time: timeLabel, items: soldItems, total: total });
     safeSet(STORAGE_LOG, log);
 
+    syncToSheet(soldItems, total);
+
     items.forEach(function (it) { order[it.id] = 0; });
     payInputEl.value = '';
     renderItems();
@@ -648,6 +696,32 @@
     setTimeout(function () { checkoutBtn.classList.remove('pulse'); }, 160);
     showToast('会計しました');
   });
+
+  // 会計データを、みんなで共有しているGoogleスプレッドシートにも送る
+  function syncToSheet(soldItems, total) {
+    if (!SCRIPT_URL) return;
+
+    var payload = {
+      staff: staffNameInput.value || '(担当者未入力)',
+      items: soldItems.map(function (i) { return i.name + '×' + i.qty; }).join(' / '),
+      total: total
+    };
+
+    syncStatusEl.textContent = '送信中…';
+
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors', // Apps Scriptの応答は読めないが、送信自体はできる
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(function () {
+      syncStatusEl.textContent = '共有シートに送信しました';
+      setTimeout(function () { syncStatusEl.textContent = ''; }, 3000);
+    }).catch(function () {
+      // オフラインなど、通信自体が失敗した場合のみここに来る
+      syncStatusEl.textContent = '⚠ 通信に失敗(手元のログには保存済み)';
+    });
+  }
 
   function showToast(msg) {
     toastEl.textContent = msg;
