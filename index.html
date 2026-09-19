@@ -432,9 +432,164 @@
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+
+  /* 役割選択・合言葉画面 */
+  .role-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .role-card {
+    width: 100%;
+    max-width: 340px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 22px;
+    text-align: center;
+  }
+  .role-title {
+    font-size: 1.3rem;
+    font-weight: 900;
+    margin-bottom: 4px;
+  }
+  .role-sub {
+    font-size: .82rem;
+    color: var(--ink-soft);
+    margin-bottom: 20px;
+  }
+  .role-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    font-family: inherit;
+    font-weight: 900;
+    font-size: .95rem;
+    margin-bottom: 10px;
+    touch-action: manipulation;
+  }
+  .role-btn.cashier {
+    background: var(--accent);
+    color: var(--accent-ink);
+  }
+  .role-btn.viewer {
+    background: var(--accent-2);
+    color: #fff;
+  }
+  .role-btn-text {
+    background: none;
+    border: none;
+    color: var(--ink-soft);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: .82rem;
+    padding: 8px;
+  }
+  .role-btn-text.small {
+    display: block;
+    margin: 2px 0 16px;
+    padding: 0;
+    text-decoration: underline;
+  }
+  .pin-input {
+    width: 100%;
+    font-family: inherit;
+    font-size: 1.1rem;
+    text-align: center;
+    letter-spacing: .15em;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .pin-error {
+    color: var(--danger);
+    font-size: .8rem;
+    margin-bottom: 10px;
+  }
+
+  /* 売上だけを見る画面 */
+  .viewer-title {
+    font-size: 1.2rem;
+    font-weight: 900;
+    margin: 10px 0 20px;
+    text-align: center;
+  }
+  .viewer-total-box {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 16px;
+    text-align: center;
+    margin-bottom: 12px;
+  }
+  .viewer-total-label {
+    font-size: .85rem;
+    color: var(--ink-soft);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .viewer-total-value {
+    font-size: 2.4rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .viewer-count {
+    font-size: .85rem;
+    color: var(--ink-soft);
+    margin-top: 6px;
+  }
+  .viewer-updated {
+    text-align: center;
+    font-size: .76rem;
+    color: var(--ink-soft);
+    margin-bottom: 24px;
+  }
 </style>
 </head>
 <body>
+
+<div id="roleScreen" class="role-screen">
+  <div class="role-card">
+    <div class="role-title">🍗 屋台レジ</div>
+    <div class="role-sub">使い方を選んでください</div>
+    <button id="roleCashierBtn" class="role-btn cashier" type="button">会計係として開く</button>
+    <button id="roleViewerBtn" class="role-btn viewer" type="button">売上を見るだけ</button>
+  </div>
+</div>
+
+<div id="pinScreen" class="role-screen" style="display:none;">
+  <div class="role-card">
+    <div class="role-title">合言葉を入力</div>
+    <div class="role-sub">会計係から聞いた合言葉を入力してください</div>
+    <input id="pinInput" class="pin-input" type="password" inputmode="numeric" placeholder="合言葉" />
+    <div class="pin-error" id="pinError" style="display:none;">合言葉が違います</div>
+    <button id="pinSubmitBtn" class="role-btn cashier" type="button">開く</button>
+    <button id="pinBackBtn" class="role-btn-text" type="button">戻る</button>
+  </div>
+</div>
+
+<div id="viewerScreen" style="display:none;">
+  <div class="wrap">
+    <div class="viewer-title">現在の売上</div>
+    <div class="viewer-total-box">
+      <div class="viewer-total-label">売上合計</div>
+      <div class="viewer-total-value" id="viewerTotal">¥0</div>
+      <div class="viewer-count" id="viewerCount">0件</div>
+    </div>
+    <div class="viewer-updated" id="viewerUpdated">読み込み中…</div>
+    <button id="viewerBackBtn" class="role-btn-text" type="button">最初の画面に戻る</button>
+  </div>
+</div>
+
+<div id="cashierApp" style="display:none;">
 <div class="wrap">
 
   <header class="top">
@@ -449,6 +604,7 @@
     <input id="staffName" type="text" placeholder="例: から揚げ係" />
   </div>
   <div class="sync-status" id="syncStatus"></div>
+  <button id="switchRoleBtn" class="role-btn-text small" type="button">役割を切り替える</button>
 
   <section>
     <div class="section-title">注文</div>
@@ -511,12 +667,19 @@
 
 <div class="toast" id="toast">会計しました</div>
 
+</div>
+
 <script>
 (function () {
   var STORAGE_ITEMS = 'stall_register_items_v1';
   var STORAGE_LOG = 'stall_register_log_v1';
   var STORAGE_NAME = 'stall_register_name_v1';
   var STORAGE_STAFF = 'stall_register_staff_v1';
+  var STORAGE_ROLE = 'stall_register_role_v1'; // 'cashier' or 'viewer'
+
+  // 会計係だけに伝える合言葉。学校のみんなで使う前に必ず変更してください。
+  // (下のApps Script側のCASHIER_PINも、必ず同じ値にそろえてください)
+  var CASHIER_PIN = 'yyy';
 
   // みんなで共有するGoogleスプレッドシートの送信先(Apps ScriptのウェブアプリURL)
   var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyirTGJNL0dK1SAVGQzEXN8TO7xkaesrgljXymFPaXMGkeAL7kYwt_ggI6NDvmTaaw/exec';
@@ -702,6 +865,7 @@
     if (!SCRIPT_URL) return;
 
     var payload = {
+      pin: CASHIER_PIN,
       staff: staffNameInput.value || '(担当者未入力)',
       items: soldItems.map(function (i) { return i.name + '×' + i.qty; }).join(' / '),
       total: total
@@ -836,6 +1000,111 @@
   renderSettings();
   renderLog();
   updateTotals();
+
+  // ------- 役割選択(会計係 / 見るだけ) -------
+  var roleScreen = document.getElementById('roleScreen');
+  var pinScreen = document.getElementById('pinScreen');
+  var viewerScreen = document.getElementById('viewerScreen');
+  var cashierApp = document.getElementById('cashierApp');
+  var pinInput = document.getElementById('pinInput');
+  var pinError = document.getElementById('pinError');
+  var viewerTotalEl = document.getElementById('viewerTotal');
+  var viewerCountEl = document.getElementById('viewerCount');
+  var viewerUpdatedEl = document.getElementById('viewerUpdated');
+  var viewerTimer = null;
+
+  function showOnly(el) {
+    [roleScreen, pinScreen, viewerScreen, cashierApp].forEach(function (s) {
+      s.style.display = (s === el) ? 'block' : 'none';
+    });
+  }
+
+  function stopViewerPolling() {
+    if (viewerTimer) {
+      clearInterval(viewerTimer);
+      viewerTimer = null;
+    }
+  }
+
+  function fetchSummary() {
+    if (!SCRIPT_URL) return;
+    fetch(SCRIPT_URL)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        viewerTotalEl.textContent = yen(data.total || 0);
+        viewerCountEl.textContent = (data.count || 0) + '件';
+        var now = new Date();
+        viewerUpdatedEl.textContent = '最終更新 ' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2) + ':' + ('0' + now.getSeconds()).slice(-2);
+      })
+      .catch(function () {
+        viewerUpdatedEl.textContent = '⚠ 取得に失敗しました(通信状況を確認してください)';
+      });
+  }
+
+  function enterViewer() {
+    showOnly(viewerScreen);
+    fetchSummary();
+    stopViewerPolling();
+    viewerTimer = setInterval(fetchSummary, 5000);
+  }
+
+  function enterCashier() {
+    showOnly(cashierApp);
+    stopViewerPolling();
+  }
+
+  document.getElementById('roleCashierBtn').addEventListener('click', function () {
+    pinInput.value = '';
+    pinError.style.display = 'none';
+    showOnly(pinScreen);
+    pinInput.focus();
+  });
+
+  document.getElementById('roleViewerBtn').addEventListener('click', function () {
+    safeSet(STORAGE_ROLE, 'viewer');
+    enterViewer();
+  });
+
+  document.getElementById('pinBackBtn').addEventListener('click', function () {
+    showOnly(roleScreen);
+  });
+
+  document.getElementById('pinSubmitBtn').addEventListener('click', function () {
+    if (pinInput.value === CASHIER_PIN) {
+      safeSet(STORAGE_ROLE, 'cashier');
+      enterCashier();
+    } else {
+      pinError.style.display = 'block';
+    }
+  });
+  pinInput.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter') document.getElementById('pinSubmitBtn').click();
+  });
+
+  document.getElementById('viewerBackBtn').addEventListener('click', function () {
+    safeSet(STORAGE_ROLE, '');
+    stopViewerPolling();
+    showOnly(roleScreen);
+  });
+
+  document.getElementById('switchRoleBtn').addEventListener('click', function () {
+    safeSet(STORAGE_ROLE, '');
+    stopViewerPolling();
+    showOnly(roleScreen);
+  });
+
+  // 前回選んだ役割を覚えておき、次回から自動でその画面を開く
+  // (合言葉そのものは保存しません。一度会計係として開いたこの端末は、
+  //  次回から合言葉なしで会計係画面になります。役割を変えたいときは
+  //  「役割を切り替える」ボタンを使ってください)
+  var savedRole = safeGet(STORAGE_ROLE);
+  if (savedRole === 'viewer') {
+    enterViewer();
+  } else if (savedRole === 'cashier') {
+    enterCashier();
+  } else {
+    showOnly(roleScreen);
+  }
 })();
 </script>
 </body>
